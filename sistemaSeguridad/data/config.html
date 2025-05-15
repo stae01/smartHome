@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Configuración</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Configuración de Umbrales</h1>
+
+    <label>Umbral de Gas MQ-2: <input type="number" id="umbralGas" /> ppm</label>
+    <label>Umbral de Humedad: <input type="number" id="umbralHumedad" /> %</label>
+    <button id="btnGuardar">Guardar</button>
+
+    <a href="/index.html">Volver al monitoreo</a>
+  </div>
+
+  <script>
+    const umbralGas = document.getElementById('umbralGas');
+    const umbralHumedad = document.getElementById('umbralHumedad');
+    const btnGuardar = document.getElementById('btnGuardar');
+
+    // Cargar umbrales actuales al cargar la página
+    fetch('/estado')
+      .then(res => res.json())
+      .then(data => {
+        umbralGas.value = data.umbral_gas;
+        umbralHumedad.value = data.umbral_humedad;
+      });
+
+    btnGuardar.onclick = () => {
+      fetch('/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          umbral_gas: parseInt(umbralGas.value),
+          umbral_humedad: parseInt(umbralHumedad.value)
+        })
+      }).then(() => alert('Configuración guardada'));
+    };
+  </script>
+</body>
+</html>

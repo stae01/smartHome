@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monitoreo</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 1em;
+      background-color: #f0f0f0;
+    }
+    .container {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 1em;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    p {
+      font-size: 1.1em;
+    }
+    button {
+      width: 100%;
+      padding: 0.7em;
+      font-size: 1em;
+      margin: 0.3em 0;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .armar-total { background-color: #28a745; color: white; }
+    .armar-noche { background-color: #17a2b8; color: white; }
+    .desarmar { background-color: #dc3545; color: white; }
+
+    .sensor-ok { font-weight: bold; }
+    .sensor-alerta { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Monitoreo</h1>
+
+    <div class="estado-alarma">
+      <h2>Alarma: <span id="estadoAlarma">...</span></h2>
+      <div id="botonesAlarma">
+        <!-- Botones serán inyectados por JavaScript -->
+      </div>
+    </div>
+
+    <div class="lecturas">
+      <h2>Lecturas Actuales</h2>
+      <p><strong><span id="icono-movimiento">⚪</span> 🚶 Movimiento:</strong> <span id="movimiento"></span></p>
+      <p><strong><span id="icono-puerta">⚪</span> 🚪 Puerta:</strong> <span id="puerta"></span></p>
+      <p><strong><span id="icono-temperatura">⚪</span> 🌡️ Temperatura:</strong> <span id="temperatura"></span> °C</p>
+      <p><strong><span id="icono-humedad">⚪</span> 💧 Humedad:</strong> <span id="humedad"></span> %</p>
+      <p><strong><span id="icono-gas">⚪</span> 🔥 Gas:</strong> <span id="gas"></span> ppm</p>
+    </div>
+
+    <p id="motivoAlarma"></p>
+    <a href="/config.html">Ir a configuración</a>
+  </div>
+
+  <script>
+    const estadoAlarmaEl = document.getElementById('estadoAlarma');
+    const botonesAlarmaEl = document.getElementById('botonesAlarma');
+
+    const sensores = {
+      movimiento: document.getElementById('movimiento'),
+      puerta: document.getElementById('puerta'),
+      temperatura: document.getElementById('temperatura'),
+      humedad: document.getElementById('humedad'),
+      gas: document.getElementById('gas')
+    };
+
+    const iconos = {
+      movimiento: document.getElementById('icono-movimiento'),
+      puerta: document.getElementById('icono-puerta'),
+      temperatura: document.getElementById('icono-temperatura'),
+      humedad: document.getElementById('icono-humedad'),
+      gas: document.getElementById('icono-gas')
+    };
+
+    let motivoAlarmaEl = document.getElementById('motivoAlarma');
+
+    function actualizarSensor(el, iconEl, valor, esAlarma, umbral = null) {
+      let alerta = (umbral !== null && valor > umbral) || (typeof valor === 'boolean' && valor);
+
+      if (!esAlarma) {
+        el.style.color = 'black';
+        iconEl.textContent = '⚪';
+      } else if (alerta) {
+        el.style.color = 'red';
+        iconEl.textContent = '🔴';
+      } else {
+        el.style.color = 'green';
+        iconEl.textContent = '🟢';
+      }
+    }
+
+    function renderizarBotones(estado) {
+      botonesAlarmaEl.innerHTML = '';
+      if (estado === 'desarmada') {
+        botonesAlarmaEl.innerHTML = `
+          <button class="armar-total" onclick="armarAlarma('total')">🛡️ Armar Total</button>
+          <button class="armar-noche" onclick="armarAlarma('noche')">🌙 Armar Noche</button>
+        `;
+      } else {
+        botonesAlarmaEl.innerHTML = `
+          <button class="desarmar" onclick="desarmarAlarma()">🔓 Desarmar</button>
+        `;
+      }
+    }
+
+    function armarAlarma(modo) {
+  let url = modo === 'total' ? '/armar-total' : '/armar-noche';
+  fetch(url, {
+    method: 'POST'
+  }).then(() => cargarEstado());
+}
+
+    function desarmarAlarma() {
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/desarmar-alarma', true);
+  xhr.onreadystatechange = function () {
+    if (xhr.readyState === 4 && xhr.status === 200) {
+      cargarEstado();
+    }
+  };
+  xhr.send();
+}
+
+    function cargarEstado() {
+      fetch('/estado')
+        .then(res => res.json())
+        .then(data => {
+          const armada = data.alarma;
+          const modo = data.modo || '';
+          estadoAlarmaEl.textContent = armada ? `Armada (${modo})` : 'Desarmada';
+          renderizarBotones(armada ? 'armada' : 'desarmada');
+
+          sensores.movimiento.textContent = data.pir ? 'Detectado' : 'Sin movimiento';
+          actualizarSensor(sensores.movimiento, iconos.movimiento, data.pir, armada);
+
+          sensores.puerta.textContent = data.puerta ? 'Abierta' : 'Cerrada';
+          actualizarSensor(sensores.puerta, iconos.puerta, data.puerta, armada);
+
+          sensores.temperatura.textContent = (data.temperatura !== undefined) ? data.temperatura.toFixed(1) : 'N/A';
+          actualizarSensor(sensores.temperatura, iconos.temperatura, 0, armada); // no alerta
+
+          sensores.humedad.textContent = (typeof data.humedad === 'number') ? data.humedad.toFixed(1) : 'N/A';
+          actualizarSensor(sensores.humedad, iconos.humedad, data.humedad, armada, data.umbralHumedad);
+
+          sensores.gas.textContent = (typeof data.gas === 'number') ? data.gas : 'N/A';
+          actualizarSensor(sensores.gas, iconos.gas, data.gas, armada, data.umbralGas);
+
+          if (armada) {
+            let motivos = [];
+            if (data.pir) motivos.push('Movimiento detectado');
+            if (data.puerta) motivos.push('Puerta abierta');
+            if (data.gas > data.umbralGas) motivos.push(`Gas alto: ${data.gas} ppm`);
+            if (data.humedad > data.umbralHumedad) motivos.push(`Humedad alta: ${data.humedad.toFixed(1)} %`);
+            motivoAlarmaEl.textContent = motivos.length ? '🚨 Motivo(s) alarma: ' + motivos.join(', ') : '';
+            motivoAlarmaEl.style.color = 'red';
+            motivoAlarmaEl.style.fontWeight = 'bold';
+          } else {
+            motivoAlarmaEl.textContent = '';
+          }
+        })
+        .catch(err => {
+          console.error('Error al obtener estado:', err);
+        });
+    }
+
+    setInterval(cargarEstado, 3000);
+    cargarEstado();
+  </script>
+</body>
+</html>
